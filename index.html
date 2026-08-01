@@ -112,7 +112,6 @@ details[open] summary::after{content:'－'}
 <section class="page active" id="p-today">
   <div class="topbar">
     <div><div class="eyebrow" id="today-eyebrow">TODAY</div><h1>今日</h1><div class="datesub" id="today-date"></div></div>
-    <button class="gear" onclick="openSetup()" aria-label="設定">⚙︎</button>
   </div>
   <div class="chips" id="daychips"></div>
   <div id="checkin-slot"></div>
@@ -131,7 +130,6 @@ details[open] summary::after{content:'－'}
   <div class="topbar"><div><div class="eyebrow">DASHBOARD</div><h1>儀表板</h1><div class="datesub">看趨勢,不看單日</div></div></div>
   <div class="kpis" id="kpis"></div>
   <div class="card chartcard"><div class="eyebrow">體重・7日均線</div><canvas id="c-weight"></canvas></div>
-  <div class="card chartcard"><div class="eyebrow">指標動作・力量趨勢</div><canvas id="c-strength"></canvas></div>
   <div class="card chartcard"><div class="eyebrow">每週出席</div><canvas id="c-attend"></canvas></div>
   <div class="card chartcard"><div class="eyebrow">飲食・週均</div><canvas id="c-food"></canvas></div>
 </section>
@@ -140,8 +138,7 @@ details[open] summary::after{content:'－'}
 <section class="page" id="p-lib">
   <div class="topbar"><div><div class="eyebrow">LIBRARY</div><h1>動作庫</h1></div></div>
   <div class="card"><details id="notesbox"><summary>訓練原則速查卡</summary><div id="notes-body"></div></details></div>
-  <div class="searchrow"><input id="libsearch" placeholder="搜尋動作…" oninput="renderLib()"></div>
-  <div class="chips" id="libchips"></div>
+  <div class="searchrow"><input id="libsearch" placeholder="搜尋(選用)…" oninput="renderLib()"></div>
   <div class="card" id="lib-body"></div>
 </section>
 
@@ -158,30 +155,14 @@ details[open] summary::after{content:'－'}
 
 <div class="toast" id="toast"></div>
 
-<!-- ===== 設定 ===== -->
-<div id="setup">
-  <div class="eyebrow">SETUP</div><h1>連線設定</h1>
-  <div class="card" style="margin-top:16px">
-    <label>Apps Script 網頁應用程式網址</label>
-    <input id="cfg-url" placeholder="https://script.google.com/macros/s/…/exec">
-    <div style="height:10px"></div>
-    <label>Token(與 Code.gs 內一致)</label>
-    <input id="cfg-token" placeholder="CHANGE_ME_…">
-    <div style="height:14px"></div>
-    <button class="btn" onclick="saveSetup()">儲存並連線</button>
-    <div style="height:8px"></div>
-    <button class="btn ghost" onclick="document.getElementById('setup').classList.remove('show')">關閉</button>
-  </div>
-  <div class="empty">設定存在這支手機的瀏覽器裡,只需填一次。</div>
-</div>
-
 <script>
 /* ================= 狀態 ================= */
+// ▼▼ 把這一行改成你的 Apps Script /exec 網址(整份檔案唯一要改的地方) ▼▼
+const API_URL='https://script.google.com/macros/s/AKfycbxgbfMnNiFQveQs9EIx7aD-q1ytuV7PWtXgjkT6IBkSYyG8ui546yIoMefctf7yS0fCYQ/exec';
 const LS='fitv2.';
 let DB={library:[],plan:[],logs:[],checkins:[],notes:[]};
 let dayType=null;           // 推日/拉日/腿日/休息日
 let charts={};
-const INDICATORS=['EX041','EX042','EX051','EX050','EX052','EX060','EX061'];
 const todayStr=()=>new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'});
 
 /* ================= 啟動 ================= */
@@ -190,27 +171,14 @@ async function init(){
   const cached=localStorage.getItem(LS+'db');
   if(cached){try{DB=JSON.parse(cached);}catch(e){}}
   paintDate();buildDayChips();
-  if(!cfg('url')){openSetup();}
   renderAll();
   await refresh();          // 背景更新
   flushQueue();
 }
-function cfg(k){return localStorage.getItem(LS+k)||'';}
-function openSetup(){
-  document.getElementById('cfg-url').value=cfg('url');
-  document.getElementById('cfg-token').value=cfg('token');
-  document.getElementById('setup').classList.add('show');
-}
-async function saveSetup(){
-  localStorage.setItem(LS+'url',document.getElementById('cfg-url').value.trim());
-  localStorage.setItem(LS+'token',document.getElementById('cfg-token').value.trim());
-  document.getElementById('setup').classList.remove('show');
-  toast('已儲存,連線中…');await refresh();
-}
 async function refresh(){
-  if(!cfg('url'))return;
+  if(API_URL.indexOf('http')!==0){toast('index.html 裡的 API_URL 還沒填');return;}
   try{
-    const r=await fetch(cfg('url')+'?token='+encodeURIComponent(cfg('token')));
+    const r=await fetch(API_URL);
     const j=await r.json();
     if(!j.ok)throw new Error(j.error);
     DB=j;localStorage.setItem(LS+'db',JSON.stringify(j));
@@ -219,9 +187,8 @@ async function refresh(){
 }
 /* 寫入(含離線佇列) */
 async function post(payload){
-  payload.token=cfg('token');
   try{
-    const r=await fetch(cfg('url'),{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
+    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
     const j=await r.json();if(!j.ok)throw 0;return true;
   }catch(e){
     const q=JSON.parse(localStorage.getItem(LS+'queue')||'[]');q.push(payload);
@@ -230,10 +197,10 @@ async function post(payload){
   }
 }
 async function flushQueue(){
-  let q=JSON.parse(localStorage.getItem(LS+'queue')||'[]');if(!q.length||!cfg('url'))return;
+  let q=JSON.parse(localStorage.getItem(LS+'queue')||'[]');if(!q.length)return;
   const rest=[];
   for(const p of q){try{
-    const r=await fetch(cfg('url'),{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(p)});
+    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(p)});
     const j=await r.json();if(!j.ok)rest.push(p);
   }catch(e){rest.push(p);}}
   localStorage.setItem(LS+'queue',JSON.stringify(rest));
@@ -295,7 +262,7 @@ function pickRotation(planRow){
 }
 
 /* ================= 今日:渲染 ================= */
-function renderAll(){buildDayChips();renderCheckin();renderToday();renderRecover();renderLibChips();renderLib();renderNotes();}
+function renderAll(){buildDayChips();renderCheckin();renderToday();renderRecover();renderLib();renderNotes();}
 
 function renderCheckin(){
   const t=todayStr();
@@ -304,23 +271,18 @@ function renderCheckin(){
   document.getElementById('checkin-slot').innerHTML=`
   <div class="card">
     <div class="eyebrow">DAILY CHECK-IN</div>
-    <div class="grid3" style="margin-top:6px">
+    <div class="grid2" style="margin-top:6px">
       <div><label>體重 kg</label><input id="ci-w" type="number" inputmode="decimal" step="0.1" value="${row['早晨體重kg']||''}"></div>
       <div><label>睡眠 h</label><input id="ci-s" type="number" inputmode="decimal" step="0.5" value="${row['睡眠時數']||''}"></div>
-      <div><label>步數</label><input id="ci-st" type="number" inputmode="numeric" value="${row['步數(選填)']||''}"></div>
     </div>
     <div style="height:10px"></div>
-    <label>睡眠品質</label>
-    <div class="dots" id="ci-q">${[1,2,3,4,5].map(n=>`<button class="dot${n<=q?' on':''}" data-n="${n}">${n}</button>`).join('')}</div>
-    <div style="height:10px"></div>
-    <div class="grid2">
-      <div><label>估計熱量 kcal</label><input id="ci-k" type="number" inputmode="numeric" value="${row['估計熱量kcal']||''}"></div>
-      <div><label>蛋白質 g</label><input id="ci-p" type="number" inputmode="numeric" value="${row['估計蛋白質g']||''}"></div>
-    </div>
+    <label>睡眠品質(1差・2普通・3好)</label>
+    <div class="dots" id="ci-q">${[1,2,3].map(n=>`<button class="dot${n<=q?' on':''}" data-n="${n}">${n}</button>`).join('')}</div>
     <div style="height:10px"></div>
     <label>身體備註</label><input id="ci-n" value="${row['身體備註']||''}" placeholder="肩緊、經期、聚餐…">
     <div style="height:12px"></div>
     <button class="btn" onclick="saveCheckin()">儲存 check-in</button>
+    <div class="li-sub" style="margin-top:8px;text-align:center">熱量・蛋白質:晚上跟 Claude 對話記錄</div>
   </div>`;
   document.querySelectorAll('#ci-q .dot').forEach(b=>b.onclick=()=>{
     document.querySelectorAll('#ci-q .dot').forEach(x=>x.classList.toggle('on',+x.dataset.n<=+b.dataset.n));});
@@ -328,9 +290,7 @@ function renderCheckin(){
 async function saveCheckin(){
   const qOn=document.querySelectorAll('#ci-q .dot.on').length;
   const row={'日期':todayStr(),'早晨體重kg':val('ci-w'),'睡眠時數':val('ci-s'),
-    '睡眠品質(1-5)':qOn||'','估計熱量kcal':val('ci-k'),'估計蛋白質g':val('ci-p'),
-    'CycleDay':'','步數(選填)':val('ci-st'),'身體備註':val('ci-n')};
-  // 樂觀更新本地
+    '睡眠品質(1-5)':qOn||'','身體備註':val('ci-n')};
   const i=DB.checkins.findIndex(c=>c['日期']===row['日期']);
   if(i>=0)Object.keys(row).forEach(k=>{if(row[k]!=='')DB.checkins[i][k]=row[k];});
   else DB.checkins.push(row);
@@ -476,28 +436,25 @@ function renderRecover(){
 }
 
 /* ================= 動作庫 ================= */
-let libFilter='全部';
-function renderLibChips(){
-  const cats=['全部','訓練','熱身','核心','居家','晚間恢復','睡前拉伸','日常拉伸'];
-  const w=document.getElementById('libchips');w.innerHTML='';
-  cats.forEach(c=>{const b=document.createElement('button');
-    b.className='chip'+(libFilter===c?' on':'');b.textContent=c;
-    b.onclick=()=>{libFilter=c;renderLibChips();renderLib();};w.appendChild(b);});
-}
+const LIB_ORDER=['訓練','熱身','核心','居家','晚間恢復','睡前拉伸','日常拉伸'];
 function renderLib(){
   const q=(document.getElementById('libsearch').value||'').toLowerCase();
   const body=document.getElementById('lib-body');body.innerHTML='';
-  const items=DB.library.filter(x=>
-    (libFilter==='全部'||x['動作類型']===libFilter)&&
-    (!q||String(x['動作名稱']).toLowerCase().includes(q)||String(x['目標部位']).toLowerCase().includes(q)));
-  if(!items.length){body.innerHTML='<div class="empty">沒有符合的動作</div>';return;}
-  items.forEach(x=>{
-    const row=document.createElement('div');row.className='listitem';
-    row.innerHTML=`<div class="li-body"><div class="li-name">${x['動作名稱']}</div>
-      <div class="li-sub">${x['動作類型']}・${x['目標部位']}${x['預設組數']?'・'+x['預設組數']+'×'+x['預設次數']:''}${x['備註']?'・'+x['備註']:''}</div></div>
-      ${videoBtn(x)}`;
-    body.appendChild(row);
+  const match=x=>!q||String(x['動作名稱']).toLowerCase().includes(q)||String(x['目標部位']).toLowerCase().includes(q)||String(x['備註']).toLowerCase().includes(q);
+  let any=false;
+  LIB_ORDER.forEach(cat=>{
+    const items=DB.library.filter(x=>x['動作類型']===cat&&match(x));
+    if(!items.length)return;any=true;
+    const h=document.createElement('div');h.className='notecat';h.textContent=cat+'('+items.length+')';body.appendChild(h);
+    items.forEach(x=>{
+      const row=document.createElement('div');row.className='listitem';
+      row.innerHTML=`<div class="li-body"><div class="li-name">${x['動作名稱']}</div>
+        <div class="li-sub">${x['目標部位']}${x['預設組數']&&x['動作類型']==='訓練'?'・'+x['預設組數']+'×'+x['預設次數']:'・'+(x['預設次數']||'')}${x['備註']?'・'+x['備註']:''}</div></div>
+        ${videoBtn(x)}`;
+      body.appendChild(row);
+    });
   });
+  if(!any)body.innerHTML='<div class="empty">沒有符合的動作</div>';
 }
 function renderNotes(){
   const box=document.getElementById('notes-body');box.innerHTML='';
@@ -526,16 +483,6 @@ function renderDash(){
     {label:'7日均線',data:ma,borderColor:'#6E8468',pointRadius:0,borderWidth:2.5,tension:.35},
     {label:'目標 60',data:ci.map(()=>60),borderColor:'#A99BC4',borderDash:[5,5],pointRadius:0,borderWidth:1.5}
   ]},options:baseOpt()});
-  // 力量圖
-  const strengthSets={};
-  DB.logs.forEach(l=>{if(!INDICATORS.includes(l['動作ID']))return;
-    const k=l['動作ID'];(strengthSets[k]=strengthSets[k]||{})[l['日期']]=Math.max(strengthSets[k][l['日期']]||0,+l['重量kg']||0);});
-  const allDates=[...new Set(DB.logs.map(l=>l['日期']))].sort();
-  const palette=['#6E8468','#9CAF97','#A99BC4','#7A6C99','#D9A96B','#8B948B','#B7C7B2'];
-  const ds=Object.entries(strengthSets).map(([id,m],i)=>({label:(lib(id)['動作名稱']||id).replace('啞鈴','').replace('Cable',''),
-    data:allDates.map(d=>m[d]??null),spanGaps:true,borderColor:palette[i%7],pointRadius:2.5,borderWidth:2,tension:.25}));
-  mkChart('c-strength',{type:'line',data:{labels:allDates.map(d=>d.slice(5)),datasets:ds},
-    options:baseOpt(ds.length?{legend:{display:true,position:'bottom',labels:{boxWidth:8,font:{size:10}}}}:null)});
   // 出席
   const byWeek={};[...new Set(DB.logs.map(l=>l['日期']))].forEach(d=>{const w=isoWeek(d);byWeek[w]=(byWeek[w]||0)+1;});
   const wk=Object.keys(byWeek).sort();
