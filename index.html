@@ -8,7 +8,9 @@
 <title>健身系統</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js">
+init();
+</script>
 <style>
 :root{
   --bg:#F5F7F2; --surface:#FFFFFF; --ink:#39413A; --muted:#8B948B;
@@ -162,11 +164,11 @@ const API_URL='https://script.google.com/macros/s/AKfycbxgbfMnNiFQveQs9EIx7aD-q1
 const LS='fitv3.';
 let DB={library:[],plan:[],logs:[],checkins:[],notes:[]};
 let dayType=null;           // 推日/拉日/腿日/休息日
+let recMode='auto';         // 恢復頁模式
 let charts={};
 const todayStr=()=>new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Taipei'});
 
 /* ================= 啟動 ================= */
-init();
 async function init(){
   const cached=localStorage.getItem(LS+'db');
   if(cached){try{DB=JSON.parse(cached);}catch(e){}}
@@ -302,7 +304,8 @@ const val=id=>document.getElementById(id).value.trim();
 function renderToday(){
   const body=document.getElementById('today-body');body.innerHTML='';
   const T=s=>String(s==null?'':s).trim();
-  const rows=DB.plan.filter(r=>T(r['訓練日'])===dayType);
+  const rows=DB.plan.filter(r=>T(r['訓練日'])===dayType)
+    .sort((a,b)=>(+a['順位']||0)-(+b['順位']||0));  // 依順位排序:改課表順序=改順位數字
   if(dayType==='休息日'){
     body.appendChild(checklistCard('居家全身循環(選做)',
       DB.library.filter(x=>String(x['動作類型']).trim()==='居家'),'每動作30秒・一輪15-20分鐘'));
@@ -411,7 +414,6 @@ async function logSet(card,row,n,id,name){
 }
 
 /* ================= 恢復 ================= */
-let recMode='auto';
 function renderRecover(){
   const chipsW=document.getElementById('recchips');chipsW.innerHTML='';
   const modes=[['auto','今日對應'],['圓肩','圓肩'],['骨盆前傾','骨盆前傾'],['扁平足','扁平足'],['睡前拉伸','睡前']];
@@ -520,6 +522,8 @@ function isoWeek(ds){const d=new Date(ds+'T00:00:00');const t=new Date(d.valueOf
   t.setDate(t.getDate()+3-((t.getDay()+6)%7));const w1=new Date(t.getFullYear(),0,4);
   const wn=1+Math.round(((t-w1)/864e5-3+((w1.getDay()+6)%7))/7);
   return `${String(t.getFullYear()).slice(2)}w${String(wn).padStart(2,'0')}`;}
+
+init();
 </script>
 </body>
 </html>
