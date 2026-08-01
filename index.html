@@ -159,7 +159,7 @@ details[open] summary::after{content:'－'}
 /* ================= 狀態 ================= */
 // ▼▼ 把這一行改成你的 Apps Script /exec 網址(整份檔案唯一要改的地方) ▼▼
 const API_URL='https://script.google.com/macros/s/AKfycbxgbfMnNiFQveQs9EIx7aD-q1ytuV7PWtXgjkT6IBkSYyG8ui546yIoMefctf7yS0fCYQ/exec';
-const LS='fitv2.';
+const LS='fitv3.';
 let DB={library:[],plan:[],logs:[],checkins:[],notes:[]};
 let dayType=null;           // 推日/拉日/腿日/休息日
 let charts={};
@@ -170,9 +170,8 @@ init();
 async function init(){
   const cached=localStorage.getItem(LS+'db');
   if(cached){try{DB=JSON.parse(cached);}catch(e){}}
-  paintDate();buildDayChips();
-  renderAll();
-  await refresh();          // 背景更新
+  paintDate();buildDayChips();renderAll();
+  await refresh();          // 抓最新資料後會重新渲染
   flushQueue();
 }
 async function refresh(){
@@ -302,15 +301,16 @@ const val=id=>document.getElementById(id).value.trim();
 
 function renderToday(){
   const body=document.getElementById('today-body');body.innerHTML='';
-  const rows=DB.plan.filter(r=>r['訓練日']===dayType);
+  const T=s=>String(s==null?'':s).trim();
+  const rows=DB.plan.filter(r=>T(r['訓練日'])===dayType);
   if(dayType==='休息日'){
     body.appendChild(checklistCard('居家全身循環(選做)',
-      DB.library.filter(x=>x['動作類型']==='居家'),'每動作30秒・一輪15-20分鐘'));
+      DB.library.filter(x=>String(x['動作類型']).trim()==='居家'),'每動作30秒・一輪15-20分鐘'));
     return;
   }
   if(!rows.length){body.innerHTML='<div class="empty">課表配置分頁沒有這一天的內容</div>';return;}
   rows.forEach(r=>{
-    const seg=r['段位']||'';
+    const seg=String(r['段位']||'').trim();
     if(seg==='熱身'){
       const ids=expandRange(r['動作ID']);
       body.appendChild(checklistCard('熱身・選 3-4 個',ids.map(lib).filter(x=>x['動作ID']),r['備註']||''));
@@ -421,16 +421,16 @@ function renderRecover(){
   });
   const body=document.getElementById('rec-body');body.innerHTML='';
   if(recMode==='auto'){
-    const opening=DB.library.filter(x=>x['目標部位']==='固定開場');
+    const opening=DB.library.filter(x=>String(x['目標部位']).trim()==='固定開場');
     body.appendChild(checklistCard('晚間開場',opening,'每式 60 秒'));
     const part=dayType==='腿日'?'下肢日':(dayType==='休息日'?null:'上肢日');
     if(part){
-      body.appendChild(checklistCard(part+'收操',DB.library.filter(x=>x['目標部位']===part),'對應今天的訓練'));
+      body.appendChild(checklistCard(part+'收操',DB.library.filter(x=>String(x['目標部位']).trim()===part),'對應今天的訓練'));
     }else{
-      body.appendChild(checklistCard('日常拉伸',DB.library.filter(x=>x['動作類型']==='日常拉伸'),'休息日輕鬆做'));
+      body.appendChild(checklistCard('日常拉伸',DB.library.filter(x=>String(x['動作類型']).trim()==='日常拉伸'),'休息日輕鬆做'));
     }
   }else{
-    const items=DB.library.filter(x=>x['目標部位']===recMode||x['動作類型']===recMode);
+    const items=DB.library.filter(x=>String(x['目標部位']).trim()===recMode||String(x['動作類型']).trim()===recMode);
     body.appendChild(checklistCard(recMode==='睡前拉伸'?'睡前拉伸(床上)':recMode+'矯正',items,''));
   }
 }
@@ -443,7 +443,7 @@ function renderLib(){
   const match=x=>!q||String(x['動作名稱']).toLowerCase().includes(q)||String(x['目標部位']).toLowerCase().includes(q)||String(x['備註']).toLowerCase().includes(q);
   let any=false;
   LIB_ORDER.forEach(cat=>{
-    const items=DB.library.filter(x=>x['動作類型']===cat&&match(x));
+    const items=DB.library.filter(x=>String(x['動作類型']).trim()===cat&&match(x));
     if(!items.length)return;any=true;
     const h=document.createElement('div');h.className='notecat';h.textContent=cat+'('+items.length+')';body.appendChild(h);
     items.forEach(x=>{
